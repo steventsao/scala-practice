@@ -20,18 +20,21 @@ object WikipediaRanking {
     "JavaScript", "Java", "PHP", "Python", "C#", "C++", "Ruby", "CSS",
     "Objective-C", "Perl", "Scala", "Haskell", "MATLAB", "Clojure", "Groovy")
 
-  val conf: SparkConf = new SparkConf().setMaster("local[1]").setAppName("myWikipediaApp")
+  val conf: SparkConf = new SparkConf().setMaster("local[*]").setAppName("myWikipediaApp")
   val sc: SparkContext = new SparkContext(conf)
   // Hint: use a combination of `sc.textFile`, `WikipediaData.filePath` and `WikipediaData.parse`
   val wikiRdd: RDD[WikipediaArticle] = sc.textFile(WikipediaData.filePath).map(WikipediaData.parse).persist()
 
+  private def lowerCaseEquals(lang: String, article: WikipediaArticle): Boolean = {
+    article.text.toLowerCase().split(" ").contains(lang.toLowerCase())
+  }
   /** Returns the number of articles on which the language `lang` occurs.
    *  Hint1: consider using method `aggregate` on RDD[T].
    *  Hint2: consider using method `mentionsLanguage` on `WikipediaArticle`
    */
   def occurrencesOfLang(lang: String, rdd: RDD[WikipediaArticle]): Int =
     rdd
-      .filter(article => article.text.contains(lang))
+      .filter(article => lowerCaseEquals(lang, article))
       .count()
       .toInt
 
@@ -55,7 +58,7 @@ object WikipediaRanking {
     rdd
       .flatMap(article => {
         langs
-          .filter(lang => article.text.contains(lang))
+          .filter(lang => lowerCaseEquals(lang, article))
           .map(lang => (lang, article))
       })
       .groupByKey()
@@ -68,7 +71,7 @@ object WikipediaRanking {
    */
   def rankLangsUsingIndex(index: RDD[(String, Iterable[WikipediaArticle])]): List[(String, Int)] =
     index
-      .map(tuple => (tuple._1, tuple._2.size))
+      .mapValues(_.size)
       .sortBy(-_._2)
       .collect()
       .toList
@@ -82,11 +85,13 @@ object WikipediaRanking {
   def rankLangsReduceByKey(langs: List[String], rdd: RDD[WikipediaArticle]): List[(String, Int)] =
   rdd
     .flatMap(article => {
-      langs.filter(lang => article.text.contains(lang)).map(lang => (lang, 1))
+      langs
+        .filter(lang => lowerCaseEquals(lang, article))
+        .map(lang => (lang, 1))
     })
     .reduceByKey(_+_)
-    .sortBy(-_._2)
     .collect()
+    .sortBy(-_._2)
     .toList
 
   def main(args: Array[String]) {
