@@ -25,16 +25,13 @@ object WikipediaRanking {
   // Hint: use a combination of `sc.textFile`, `WikipediaData.filePath` and `WikipediaData.parse`
   val wikiRdd: RDD[WikipediaArticle] = sc.textFile(WikipediaData.filePath).map(WikipediaData.parse).persist()
 
-  private def lowerCaseEquals(lang: String, article: WikipediaArticle): Boolean = {
-    article.text.toLowerCase().split(" ").contains(lang.toLowerCase())
-  }
   /** Returns the number of articles on which the language `lang` occurs.
    *  Hint1: consider using method `aggregate` on RDD[T].
    *  Hint2: consider using method `mentionsLanguage` on `WikipediaArticle`
    */
   def occurrencesOfLang(lang: String, rdd: RDD[WikipediaArticle]): Int =
     rdd
-      .filter(article => lowerCaseEquals(lang, article))
+      .filter(article => article.mentionsLanguage(lang))
       .count()
       .toInt
 
@@ -54,17 +51,16 @@ object WikipediaRanking {
   /* Compute an inverted index of the set of articles, mapping each language
    * to the Wikipedia pages in which it occurs.
    */
-  def makeIndex(langs: List[String], rdd: RDD[WikipediaArticle]): RDD[(String, Iterable[WikipediaArticle])] =
-    rdd
-      .flatMap(article => {
-        langs
-          .filter(lang => lowerCaseEquals(lang, article))
-          .map(lang => (lang, article))
-      })
+  def makeIndex(langs: List[String], rdd: RDD[WikipediaArticle]): RDD[(String, Iterable[WikipediaArticle])] = {
+    val dict = rdd .flatMap(article => { langs .filter(lang => article.mentionsLanguage(lang)).map(lang => (lang, article)) })
+      dict
       .groupByKey()
+  }
+
 
   /* (2) Compute the language ranking again, but now using the inverted index. Can you notice
    *     a performance improvement?
+   *
    *
    *   Note: this operation is long-running. It can potentially run for
    *   several seconds.
@@ -86,7 +82,7 @@ object WikipediaRanking {
   rdd
     .flatMap(article => {
       langs
-        .filter(lang => lowerCaseEquals(lang, article))
+        .filter(lang => article.mentionsLanguage(lang))
         .map(lang => (lang, 1))
     })
     .reduceByKey(_+_)
