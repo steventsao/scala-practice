@@ -3,4 +3,5 @@ build.sbt
 project/
 target/
 *.dat
+*.csv
 .DS_Store
